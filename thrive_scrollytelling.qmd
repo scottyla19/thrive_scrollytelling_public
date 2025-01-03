@@ -342,7 +342,7 @@ That's enough examples for now.
 <br/>
 <br/>
 
-Feel free to investigate other Illinois schools via this interactive map.
+Feel free to investigate other Illinois schools via this interactive map. *If viewing on a mobile phone, you may need to rotate your screen into landscape mode to interact with the map.*
 :::
 
 :::{#cr-school_map}
@@ -370,7 +370,7 @@ m <- leaflet() %>%
                 title = str_glue("Thrive Award"),
                 opacity = 1
       )
-# had to add some other output to make the map display. Otherwise, the map had 0 width in the rendered output html
+# had to add some other output to make the map display before finding CSS solution.
 # htmltools::h3("Illinois Thrive Award Interactive School Map")
 m
 
