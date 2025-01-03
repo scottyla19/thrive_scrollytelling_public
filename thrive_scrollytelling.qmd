@@ -475,8 +475,6 @@ Not only does the net score avoid the socioeconomic bias of test scores, but it 
 
 From the plots, we can see the net score has a positive correlation with GreatSchools ratings. Schools with high net scores tend to have higher GreatSchools ratings, too. @cr-ratings_net_score
 
-Meaning that, according to both the 5 Essentials Survey and GreatSchools ratings, we can see that schools that are well organized on the five essentials are in fact set up to improve their outcomes. @cr-ratings_net_score
-
 :::{#cr-ratings_net_score}
 ```{r, ratings_net_score}
   ggplot(plot_data, aes(x = net_score, y = value)) +
@@ -488,6 +486,22 @@ Meaning that, according to both the 5 Essentials Survey and GreatSchools ratings
 ```
 
 :::
+
+An alternative plot that tells the same story is offered via these boxplots. We can see that as the net_score increases, so does the median rating value. @cr-ratings_net_score_boxplot
+
+Meaning that, according to both the 5 Essentials Survey and GreatSchools ratings, we can see that schools that are well organized on the five essentials are in fact set up to improve their outcomes. @cr-ratings_net_score_boxplot
+
+:::{#cr-ratings_net_score_boxplot}
+```{r, ratings_net_score_boxplot}
+  ggplot(plot_data, aes(x = net_score, y = value, group = net_score, fill = as.factor(net_score))) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = 'RdYlGn') +
+  theme_economist() +
+  theme(legend.position="none") +
+  facet_wrap(~rating, ncol = 2, labeller = labeller(rating = variable_names))
+```
+:::
+
 :::
 <br/>
 
