@@ -1,0 +1,499 @@
+---
+title: "Illinois' Essentially Thriving Schools"
+author: Scott LaForest
+self-contained: true
+execute:
+  echo: false
+  error: false
+  warning: false
+format:
+  closeread-html:
+    css: mystyles.css
+    cr-style:
+      section-background-color: "#1A9DD1"
+      narrative-text-color-overlay: "#e2e2e2"
+    mermaid:
+      theme: forest
+---
+```{r, setup}
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(gt)
+library(leaflet)
+library(ggpmisc)
+library(ggthemes)
+
+data <- read_csv("5e_scrollytelling_data.csv")
+data_wide <- data %>% 
+  select(-data_type_id) %>% 
+  pivot_wider(names_from = essentials_label,
+              values_from = value) %>% 
+  mutate(across(ends_with('_level'), ~ if_else(.x > 3, 1, if_else(.x == 3, 0, -1)), .names = "{col}_indicator")) %>% 
+  rowwise() %>% 
+  mutate(net_score = sum(c(leaders_level_indicator, 
+                        teachers_level_indicator,
+                        families_level_indicator, 
+                        environment_level_indicator, 
+                        instruction_level_indicator), na.rm = T),
+         thrive_award = if_else(net_score >= 3, 1, 0),
+         thrive_factor = if_else(thrive_award == 1, 'Yes', 'No')) %>% 
+  ungroup()
+
+instruction_score_mean <- data %>% 
+  filter(grepl("_score", essentials_label)) %>% 
+  group_by(essentials_label) %>% 
+  summarise(mean = mean(value, na.rm = T)) %>% 
+  filter(essentials_label == 'instruction_score') %>% 
+  pull(mean) %>% 
+  round(1)
+
+chappell_name <- data_wide %>% filter(state_school_id == 'il_1000') %>% pull(name)
+central_jhs <- data_wide %>% filter(state_school_id == 'il_781') %>% pull(name)
+```
+Ahh, the great state of Illinois, the Prairie State. Home to Abe Lincoln, Deep Dish pizza, and [Da Bears](https://www.youtube.com/watch?v=B9NO24hbe8Q). Illinois is also home to the [Illinois 5Essentials Survey](https://www.isbe.net/Pages/5Essentials-Survey.aspx), a research-backed survey sent to schools across the state. The survey aims to identify five indicators, or essentials, that lead to school improvements such as increased test score proficiency and increased attendance. The 5Essentials Survey measures the student and teacher responses in the following five components found to be critical for school success:
+
+1. Effective Leaders: The principal works with teachers to implement a clear and strategic vision for school success.  
+2. Collaborative Teachers: Teachers collaborate to promote professional growth.  
+3. Involved Families: The entire school staff builds strong relationships with families and communities to support learning.  
+4. Supportive Environment: The school is safe and orderly. Teachers have high expectations for students and support students to realize their goals. Classmates also support one another.  
+5. Ambitious Instruction: Classes are academically demanding and engage students by emphasizing the application of knowledge.
+
+GreatSchools, a national nonprofit school information site, gives out the *Thrive Award* to schools in Illinois that earn superior marks across these five essential indicators. The [award methodology](https://www.greatschools.org/gk/thrive-award-methodology/) is designed to recognize public schools in Illinois that demonstrate positive, supportive learning environments for students and staff. 
+
+Let’s dive into the 5Essentials data to explore how schools earn the Thrive Award.
+
+:::{.cr-section}
+
+To start, each school that takes the survey is given three types of scores: a measure score, essential score, and essential level.
+
+The **Measure score** is a 1-99 value that is not included in this data. It is a score that combines the responses across multiple survey questions [using Rasch analysis](https://impactsurveys.my.site.com/s/article/how-scores-are-calculated?r=87&ui-knowledge-components-aura-actions.KnowledgeArticleVersionCreateDraftFromOnlineAction.createDraftFromOnlineArticle=1). @cr-measure_score_diagram
+
+:::{#cr-measure_score_diagram}
+```{mermaid, measure_score_diagram}
+flowchart TD
+   r1(response1)
+  r2(response2)
+  r3(response3...)
+ 
+  r1 --> A
+  r2 --> A
+  r3 --> A
+  A[Rasch analysis] --> B([measure scores]) 
+```
+
+:::
+
+The **Essential score** is also a 1-99 value that is the average of all the measure scores for each of the 5E indicators listed above. @cr-essential_score_diagram
+
+:::{#cr-essential_score_diagram}
+```{mermaid, essential_score_diagram}
+flowchart TD
+  r1(response1):::prev_step
+  r2(response2):::prev_step
+  r3(response3...):::prev_step
+  classDef prev_step fill:gray
+  r1 --> A
+  r2 --> A
+  r3 --> A
+  A[Rasch analysis]:::prev_step --> B([measure scores]):::prev_step
+  B -->|average measure scores across each essential| C([essential scores])
+ 
+```
+
+:::
+
+The **Essential level** is a categorical indicator value ranging from one to five. Each level corresponds to 1-very_weak, 2-weak, 3-neutral, 4-strong, 5-very_strong where each level score is derived from the `essential score` value. @cr-essential_level_diagram
+
+
+:::{#cr-essential_level_diagram}
+```{mermaid, essential_level_diagram}
+flowchart TD
+  r1(response1):::prev_step
+  r2(response2):::prev_step
+  r3(response3...):::prev_step
+  classDef prev_step fill:gray
+  r1 --> A
+  r2 --> A
+  r3 --> A
+  A[Rasch analysis]:::prev_step --> B([measure scores]):::prev_step
+  B -->|average measure scores across each essential| C([essential scores]):::prev_step
+  C -->|every 20 points is one standard deviation| D([essential level])
+  linkStyle 4 fill:gray
+
+```
+
+:::
+
+Let’s start with the essential scores and see how they morph into an essential level.
+
+Here are the distributions of essential scores across the five essentials. @cr-score_plot_basic
+
+> Note: the `instruction_scores` distribution has a higher peak than the others with more values near the mean (higher kurtosis) and higher mean of `r instruction_score_mean`. @cr-score_plot_basic
+
+:::{#cr-score_plot_basic}
+```{r, score_plot_basic}
+data %>% 
+  filter(grepl("_score", essentials_label)) %>% 
+ggplot( aes(x = value)) +
+  geom_histogram(binwidth = 2) +
+  scale_x_continuous(breaks= c(20, 40, 60 ,80, 100)) +
+  facet_wrap(~essentials_label) +
+theme_economist()
+```
+
+:::
+
+From these distributions of essential scores, we can find the essential level for each of the five essentials for each school. @cr-score_plot_color
+
+The 5Essentials calculations are set up so that every 20 points marks a standard deviation. Here we label essential score values accordingly to get our essential levels. @cr-score_plot_color
+
+Essentially (pun intended), essential score values 1-19 are labeled 1-very_weak, 20-39 values are labeled 2-weak, etc. @cr-score_plot_color
+
+
+:::{#cr-score_plot_color}
+```{r, score_plot_color}
+score_palette <-  c("#762872", "#D4ADD2", "#FFFF99", "#78BE20", "#008EAA")
+data %>% 
+  filter(grepl("_score", essentials_label)) %>% 
+  mutate(essential_level = case_when(value <= 19 ~ "very_weak",
+                               value > 19 & value < 40 ~ "weak",
+                               value >= 40 & value < 60 ~ "neutral",
+                               value >= 60 & value < 80 ~ "strong",
+                               value >= 80 ~ "very_strong",
+                               TRUE ~ NA),
+         essential_level = factor(essential_level, levels= c("very_weak", "weak", "neutral", "strong", "very_strong"))) %>% 
+ggplot( aes(x = value, fill = essential_level)) +
+  geom_histogram(binwidth = 2) +
+  scale_fill_manual(values = score_palette) +
+  scale_x_continuous(breaks= c(20, 40, 60 ,80, 100)) +
+  facet_wrap(~essentials_label) +
+theme_economist()
+```
+
+:::
+
+Now we have created the essential levels from the essential scores. Here are the distributions of the level scores. @cr-levels_distribution
+
+:::{focus-on="cr-levels_distribution"}
+> Note: The instructions_levels for this year have more ‘neutral’ and ‘strong’ levels and relatively few ‘very_weak’ or ‘weak’ levels compared to other essentials, probably due to the different distribution noted above. 
+
+:::
+
+:::{#cr-levels_distribution}
+```{r, levels_distribution}
+data %>% 
+  filter(grepl("_level", essentials_label),
+         value != 0,) %>% 
+  mutate(essential_level = case_when(value == 1 ~ "very_weak",
+                               value == 2 ~ "weak",
+                               value == 3 ~ "neutral",
+                               value == 4 ~ "strong",
+                               value == 5 ~ "very_strong",
+                               TRUE ~ NA),
+         essential_level = factor(essential_level, levels= c("very_weak", "weak", "neutral", "strong", "very_strong")))%>% 
+ggplot( aes(x = value, fill = essential_level)) +
+  geom_histogram(bins = 5) +
+  scale_fill_manual(values = score_palette) +
+  facet_wrap(~essentials_label) +
+theme_economist()
+```
+
+:::
+
+Now that we know where the data comes from, let’s take a closer look at the GreatSchools Thrive Award methodology.
+
+Our Thrive Award is very similar to the Illinois 5Essentials Survey overall score. The one main difference is we don’t provide varying levels of performance for our award. We simply offer a binary, yes/no, value. The Thrive Award is simple, either you earn an award or you don’t. To earn a Thrive Award, schools must earn a value of 3 or greater for their net score. @cr-thrive_5E_diagram
+
+A net score is calculated as follows: +1 for ‘strong’ or ‘very_strong’ essential levels, 0 for ‘neutral’ essential levels, and -1 for ‘weak’ or ‘very_weak’ essential levels. Then, for each school, we add up the indicator scores (+1, 0, or -1) from the 5Essentials levels to get the school’s overall net score. @cr-thrive_5E_diagram
+
+:::{#cr-thrive_5E_diagram}
+```{mermaid, thrive_5E_diagram}
+flowchart LR
+   C([net score])
+  C --> D[Thrive] 
+  C --> E[5E overall]
+  D --> F[yes]
+  D --> G[no]
+  E --> H[Well Organized]
+  E --> I[Organized]
+  E --> J[Moderately Organized]
+  E --> K[Partially Organized]
+  E --> L[Not Yet Organized]
+```
+
+:::
+
+It’s probably easier to look at a few examples, let’s start with a non-winner first.
+
+As we can see with this high school in Park Ridge, they miss out on a Thrive Award because their level values of 1, 3, 4, 4, and 3 correspond with level indicators of -1, 0, 1, 1, and 0. @cr-non_winner_example
+
+When we sum their indicators, we get (-1 + 0 + 1 + 1 + 0) = 1. This is below the threshold of 3, so this school does not receive an award. @cr-non_winner_example
+
+The good news for this school is that they know what areas they are prepared in and what areas they need to improve. This school can work to improve their low level scores while maintaining the processes in their areas of strength. @cr-non_winner_example
+
+:::{#cr-non_winner_example}
+```{r, non_winner_example}
+build_indicator_df <- function(school_id) {
+  levels <- data_wide %>% 
+  filter(state_school_id == school_id) %>% 
+  select(ends_with('_level')) %>% 
+  mutate(across(everything(), ~ as.character(.))) %>% 
+pivot_longer(everything()) %>%
+  select(name, level = value) %>% 
+  mutate(essential_name = str_replace(name, "_level", "")) %>% 
+  select(-name) %>% 
+  relocate(essential_name, .before = level) %>% 
+  rownames_to_column()
+
+indic <- data_wide %>% 
+  filter(state_school_id == school_id) %>% 
+  select(ends_with('_indicator')) %>% 
+  mutate(across(everything(), ~ as.character(.))) %>% 
+pivot_longer(everything()) %>%
+  select(name, indicator = value) %>% 
+   mutate(essential_name = str_replace(name, "_level_indicator", "")) %>% 
+  select(-name) %>% 
+  relocate(essential_name, .before = indicator) %>% 
+  rownames_to_column()
+
+df <- levels %>% 
+  inner_join(indic) %>% 
+  select(-rowname) %>% 
+  mutate(level = as.numeric(level),
+        indicator = as.numeric(indicator))
+
+return (df)
+}
+
+df <- build_indicator_df('il_2743')
+  
+gt(df) %>% 
+  data_color(columns = 'level',
+             # method = 'numeric',
+             direction = 'column',
+             domain = c(1, 2,3,4,5),
+             palette = score_palette) %>% 
+  tab_header(
+        title = md(str_glue("**Non-winning Thrive example**")),
+        subtitle = md(str_glue("net_score: {str_c(df$indicator, collapse = ' + ')} = {sum(df$indicator, na.rm = T)}"))
+  ) %>% 
+tab_options(table.background.color = '#D5E4EB' )
+
+
+```
+
+:::
+
+Here are a few examples of schools that do earn a Thrive Award. @cr-chappell_example
+
+Notice how `r chappell_name` barely reaches the threshold `net_score` of 3 as they have 3 positive and two neutral indicators. @cr-chappell_example
+
+
+:::{#cr-chappell_example}
+```{r, chappell_example}
+
+df <- build_indicator_df('il_1000')
+  
+gt(df) %>% 
+  data_color(columns = 'level',
+             # method = 'numeric',
+             direction = 'column',
+             domain = c(1, 2,3,4,5),
+             palette = score_palette) %>% 
+  tab_header(
+        title = md(str_glue("**{chappell_name}**")),
+        subtitle = md(str_glue("net_score: {str_c(df$indicator, collapse = ' + ')} = {sum(df$indicator, na.rm = T)}"))
+  ) %>% 
+tab_options(table.background.color = '#D5E4EB' )
+
+```
+
+:::
+
+Similarly, `r central_jhs` barely reaches the threshold as they have four positive indicators and one negative indicator for a `net_score` of 3 as well. @cr-central_jhs_example
+
+:::{#cr-central_jhs_example}
+```{r, central_jhs_example}
+
+df <- build_indicator_df('il_781')
+  
+gt(df) %>% 
+  data_color(columns = 'level',
+             direction = 'column',
+             domain = c(1, 2,3,4,5),
+             palette = score_palette) %>% 
+  tab_header(
+        title = md(str_glue("**{central_jhs}**")),
+        subtitle = md(str_glue("net_score: {str_c(df$indicator, collapse = ' + ')} = {sum(df$indicator, na.rm = T)}"))
+  ) %>% 
+tab_options(table.background.color = '#D5E4EB' )
+
+```
+
+:::
+
+So any school with a net score that sums to 3 or greater receives a Thrive Award, everyone else does not. @cr-central_jhs_example
+
+
+:::{focus-on="cr-school_map"}
+
+That's enough examples for now. 
+<br/>
+<br/>
+
+Feel free to investigate other Illinois schools via this interactive map.
+:::
+
+:::{#cr-school_map}
+```{r, school_map}
+
+school_color <- colorFactor(palette = 'RdYlGn', data_wide$thrive_factor)
+
+m <- leaflet() %>%
+      addTiles() %>% 
+      addCircleMarkers(
+        data = data_wide,
+        lng = ~lon,
+        lat = ~lat,
+        popup = ~ str_glue("{name} <br />",
+                           "{city}, {toupper(state)}  <br />",
+                            "net_score: {net_score} <br/>",
+                            "Thrive Winner: {thrive_factor} <br/>",
+                            "<a href='{canonical_url}' target='_blank'> School overview</a> <br/>"
+        ),
+        opacity = ~ (thrive_award + 0.5) / 4,
+        color = ~ school_color(thrive_factor),
+      ) %>%
+      addLegend("bottomright",
+                pal = school_color, values = c("No", "Yes"),
+                title = str_glue("Thrive Award"),
+                opacity = 1
+      )
+# had to add some other output to make the map display. Otherwise, the map had 0 width in the rendered output html
+# htmltools::h3("Illinois Thrive Award Interactive School Map")
+m
+
+```
+
+:::
+
+:::
+<br/>
+Now that we’ve looked at the Thrive Award and the 5Essentials net score, there are a couple of other interesting ideas to look into:
+
+1. How are test scores related to the socioeconomic makeup of student populations?  
+2. Does the 5Essentials net score correlate with positive school outcomes, as it claims?
+
+We will start by looking into how the socioeconomic status of a school’s student population is correlated with test scores. We will use a school’s percent of students who are on the Free and Reduced-Price Lunch (FRL) program as our economic indicator to compare with various GreatSchools ratings. 
+
+Secondly, we will look at the 5Essentials net score to see how it correlates with positive school outcomes.
+
+Let’s look at these two topics.
+
+:::{.cr-section}
+
+## Test Scores and Socioeconomic status
+
+The GreatSchools 1-10 Summary Rating is based on up to four themed ratings, each of which is designed to show different facets of school success. The Test Score Rating calculates how well a school performs on state standardized tests compared with other schools in the state. However, there is a problem with using test scores as the **only** measure of school success. This is because test scores are strongly negatively correlated with the socioeconomic status of the school’s student body. Test scores tell us something about the proficiency of the students in the school but they don’t tell the whole story. @cr-test_score_frl
+
+Using school percent of FRL and comparing it to GreatSchools’ test score percentile rating, we can see that there is a fairly strong negative correlation (Pearson R correlation coefficient r \= \-0.76) between the two variables. Unfortunately, we can see **as FRL percent increases test scores tend to decrease**. @cr-test_score_frl
+
+:::{#cr-test_score_frl}
+```{r, test_score_frl}
+ggplot(data_wide, aes(x = frl_pct, y = rating_pct_test)) +
+  geom_point(color = '#4ABFA4', alpha = 0.5) + 
+  stat_poly_line( color = 'blue') +
+  # stat_poly_eq(color = 'blue', label.x = 'right') +
+  geom_text(x = .75, 
+            y = 1, 
+            label=str_glue("r = {round(cor(data_wide$frl_pct, data_wide$rating_pct_test, use = 'complete.obs'), 2)}"), 
+            color = "blue") +
+  theme_economist()
+```
+
+:::
+
+Using **only** test scores includes the bias of socioeconomic status of the student body. That is one of the reasons why GreatSchools [calculates and weighs other ratings more heavily](https://www.greatschools.org/gk/articles/why-student-growth-matters/) in our methodology. @cr-test_score_frl
+
+Here are some other similar plots for our Summary, Student Progress, College Readiness, and Equity Ratings. You can learn more about our ratings on our [Ratings Methodology](https://www.greatschools.org/gk/ratings/) page. Most of the ratings use test scores in some way while attempting to limit the effects of bias in state proficiency tests. @cr-all_ratings_frl
+
+Notice that the Test Score Rating has a vastly larger negative correlation. We can take from this that using test scores alone as a metric includes the inherent bias associated with test scores and socioeconomics of the student body. @cr-all_ratings_frl
+
+For these reasons it is good to take into account all information and multiple ratings such as Summary, Equity, and Student Progress Ratings when looking at schools.  @cr-all_ratings_frl
+
+:::{#cr-all_ratings_frl}
+```{r, all_ratings_frl}
+
+plot_data <- data_wide %>%
+  select(state_school_id, c('rating_pct_summary', 'rating_pct_growth', 'rating_pct_equity', 'rating_pct_test', 'rating_pct_college_readiness'), frl_pct, net_score) %>%
+  pivot_longer(cols = c('rating_pct_summary', 'rating_pct_growth', 'rating_pct_equity', 'rating_pct_test', 'rating_pct_college_readiness'), 
+              names_to = 'rating') %>%
+  group_by(rating) %>% 
+  mutate(r_frl_ratings = round(cor(frl_pct, value, use = 'complete.obs'), 2),
+        r_net_score_ratings = round(cor(net_score, value, use = 'complete.obs'), 2)) %>% 
+  ungroup()
+
+variable_names <- c(
+  rating_pct_summary = "Summary Rating" ,
+  rating_pct_growth = "Student Progress",
+  rating_pct_equity = "Equity Rating",
+  rating_pct_test = "Test Score Rating",
+  rating_pct_college_readiness  = "College Readiness"
+)
+
+  ggplot(plot_data, aes(x = frl_pct, y = value)) +
+  geom_point(color = '#4ABFA4', alpha = 0.5) + 
+  stat_poly_line( color = 'blue') +
+  geom_text(x = .75, y = 1, label=str_glue("r = {plot_data$r_frl_ratings}"), color = "blue") +
+  theme_economist() +
+  facet_wrap(~rating, labeller = labeller(rating = variable_names))
+```
+
+:::
+## Does the 5Essentials Survey align with measures of school outcomes and improvement?
+
+The good news about the Thrive Award is that it does not take into account test scores at all when calculating the net score. Decoupling a school metric from test scores can offer other insights into the quality of a school that test scores may not. @cr-frl_net_score
+
+We can see that there is really no pattern to the scatterplot and the correlation is weak between FRL percent and net score. @cr-frl_net_score
+
+:::{#cr-frl_net_score}
+```{r, frl_net_score}
+ggplot(data_wide, aes(x = frl_pct , y = net_score)) +
+  geom_jitter(color = '#4ABFA4', alpha = 0.5) + 
+  stat_poly_line( color = 'blue') +
+  geom_text(x = .75,
+            y = 4, 
+            label=str_glue("r = {round(cor(data_wide$frl_pct, data_wide$net_score, use = 'complete.obs'), 2)}"), 
+            color = "blue") +
+  theme_economist() 
+```
+
+:::
+
+Not only does the net score avoid the socioeconomic bias of test scores, but it also correlates with GreatSchools’ measures of successful schools. @cr-ratings_net_score
+
+From the plots, we can see the net score has a positive correlation with GreatSchools ratings. Schools with high net scores tend to have higher GreatSchools ratings, too. @cr-ratings_net_score
+
+Meaning that, according to both the 5 Essentials Survey and GreatSchools ratings, we can see that schools that are well organized on the five essentials are in fact set up to improve their outcomes. @cr-ratings_net_score
+
+:::{#cr-ratings_net_score}
+```{r, ratings_net_score}
+  ggplot(plot_data, aes(x = net_score, y = value)) +
+  geom_jitter(color = '#4ABFA4', alpha = 0.5) + 
+  stat_poly_line( color = 'blue') +
+  geom_text(x = -4, y = 1, label=str_glue("r = {plot_data$r_net_score_ratings}"), color = "blue") +
+  theme_economist() +
+  facet_wrap(~rating, ncol = 2, labeller = labeller(rating = variable_names))
+```
+
+:::
+:::
+<br/>
+
+That was a lot! If you’re still here, thanks for reading all the way through. We’ve seen how the Illinois 5 Essentials Survey and the corresponding net score is calculated. We also saw how the Thrive Award is created from the net score.
+
+Then, we looked into how state proficiency tests are correlated with economic indicators such as FRL percentage. Our exploration used Illinois data only, but this trend is similar nationwide. Finally, we were able to see how the 5 Essentials data is less correlated with low-income indicators **and** aligns with GreatSchools’ measures of success.
+
+Thanks for scrolling along and hopefully we were able to learn something together. That’s enough for now, I’m going to take a break to order a Deep Dish pizza and rewatch *The Last Dance*.
+
