@@ -342,7 +342,10 @@ That's enough examples for now.
 <br/>
 <br/>
 
-Feel free to investigate other Illinois schools via this interactive map. *If viewing on a mobile phone, you may need to rotate your screen into landscape mode to interact with the map.*
+Feel free to investigate other Illinois schools via this interactive map. 
+
+<br/>
+*On mobile, you can interact with the map by first tapping within the map. You can scroll past by touching and dragging anywhere outside the map.*
 :::
 
 :::{#cr-school_map}

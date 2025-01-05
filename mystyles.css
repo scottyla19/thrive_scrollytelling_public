@@ -15,13 +15,34 @@ blockquote p {
   color: antiquewhite;
 }
 
-/* from https://github.com/qmd-lab/closeread/discussions/161#discussioncomment-11688720 */
 .sticky-col-stack {
-    container-name: sticks;
-    container-type: size;
-  }
-
-.sticky-col-stack .html-widget {
-  width: 100cqw !important;
-  height: 100cqh !important;
+      container-name: sticks;
+      container-type: size;
 }
+
+@media (min-width: 576px) {
+  .sticky-col-stack .html-widget {
+    width: 100cqw !important;
+    height: 100cqh !important;
+  }
+  
+}
+
+@media (max-width: 575.98px) {
+
+  .sticky-col-stack .html-widget {
+    width: 90cqw !important;
+    height: 75cqh !important;
+  }
+  
+  .narrative-col {
+    pointer-events: none;
+  }
+    
+  #cr-school-map {
+    pointer-events: all;
+  }
+  
+}
+
+
