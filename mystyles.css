@@ -35,8 +35,16 @@ blockquote p {
     height: 75cqh !important;
   }
   
-  
-  
-}
+  .narrative-col {
+      pointer-events: none;
+    }
+    
+    #cr-school-map{
+       pointer-events: all;
+    }
 
+    .trigger {
+      pointer-events: none;
+    }
+}
 
